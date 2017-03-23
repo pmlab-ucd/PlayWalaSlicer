@@ -1,0 +1,20 @@
+<component name="libraryTable">
+  <library name="com.ibm.wala.cast">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.cast.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.core-1.3.6-ANDROID_LISTENER.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.core-1.3.7-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.shrike.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.util.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.core-1.3.7-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.shrike-1.3.7-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.util-1.3.7-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.core-1.3.7-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../MyIntelliDroid/libs/com.ibm.wala.shrike-1.3.7-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
