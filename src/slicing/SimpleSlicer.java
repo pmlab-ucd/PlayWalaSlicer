@@ -12,9 +12,7 @@ import java.io.*;
 import java.util.*;
 import java.util.jar.JarFile;
 
-import com.ibm.wala.classLoader.IMethod;
-import com.ibm.wala.classLoader.JarFileModule;
-import com.ibm.wala.classLoader.Module;
+import com.ibm.wala.classLoader.*;
 import com.ibm.wala.ipa.callgraph.CallGraphBuilder;
 import com.ibm.wala.ipa.callgraph.impl.Util;
 import com.ibm.wala.ipa.callgraph.AnalysisCache;
@@ -30,6 +28,9 @@ import com.ibm.wala.ipa.slicer.Slicer.ControlDependenceOptions;
 import com.ibm.wala.ipa.slicer.Slicer.DataDependenceOptions;
 import com.ibm.wala.ipa.slicer.Statement.Kind;
 import com.ibm.wala.properties.WalaProperties;
+import com.ibm.wala.shrikeBT.Constants;
+import com.ibm.wala.shrikeBT.IInstruction;
+import com.ibm.wala.shrikeBT.MethodData;
 import com.ibm.wala.ssa.IR;
 import com.ibm.wala.ssa.SSAAbstractInvokeInstruction;
 import com.ibm.wala.ssa.SSAInstruction;
@@ -50,6 +51,8 @@ import com.ibm.wala.util.collections.Filter;
 import com.ibm.wala.viz.DotUtil;
 import com.ibm.wala.viz.NodeDecorator;
 import com.ibm.wala.viz.PDFViewUtil;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.ClassNode;
 
 public class SimpleSlicer {
 
@@ -176,7 +179,7 @@ public class SimpleSlicer {
             final long endTime = System.currentTimeMillis();
 
             //dumpSlice(slice, PRINT_LIMIT);
-            dumpSlice(slice);
+            dumpSlice(slice, 30);
 
             SDG sdg = new SDG(callGraph, pointerAnalysis, dataDependenceOptions, controlDependenceOptions);
 
@@ -184,10 +187,6 @@ public class SimpleSlicer {
             Graph<Statement> graph = pruneSDG(sdg, slice);
 
             sanityCheck(slice, graph);
-
-            for (Statement statement : graph) {
-                System.out.println(statement);
-            }
 
             report(analysis, endTime - startTime);
             /*
@@ -240,10 +239,14 @@ public class SimpleSlicer {
     // find node for method in call graph
     public static CGNode findMethod(CallGraph cg, MethodReference method) {
         for (Iterator<? extends CGNode> it = cg.iterator(); it.hasNext();) {
-            CGNode n = it.next();
-            System.out.println(n.getMethod());
-            if (n.getMethod().getReference().equals(method)) {
-                return n;
+            CGNode cgNode = it.next();
+            if (cgNode.getMethod().getReference().equals(method)) {
+                for (SSAInstruction ssaInstruction : cgNode.getIR().getInstructions()) {
+                    if (ssaInstruction != null) {
+                        System.out.println(ssaInstruction);
+                    }
+                }
+                return cgNode;
             }
         }
         System.err.println("call graph " + cg);
@@ -291,35 +294,57 @@ public class SimpleSlicer {
         }
     }
 
-    /**
-     * Print out statements to stdout (up to limit # of statements)
-     * @param slice
-     * @param limit
-     */
-    public static void dumpSlice(Collection<Statement> slice, int limit) {
-        Iterator<Statement> s = slice.iterator();
-        for (int i = 0; i < limit && s.hasNext(); i++) {
-            for (SSAInstruction instruction : s.next().getNode().getIR().getInstructions()) {
-                if (instruction != null) {
-                    System.out.println(i + ": " + instruction);
-                }
-            }
-        }
-    }
-
-    public static void dumpSlice(Collection<Statement> slice, PrintWriter w) {
+    public static void dumpSlice(Collection<Statement> slice, PrintWriter w, int limit) {
+        List<IInstruction> iInstructions = new ArrayList<>();
         w.println("SLICE:\n");
         int i = 1;
-        for (Statement s : slice) {
-            s.toString();
-            String line = (i++) + "   " + s;
+        for (Statement statement : slice) {
+            String line = (i++) + "   " + statement;
+            if (statement.getKind() == Statement.Kind.NORMAL) { // ignore special kinds of statements
+                int bcIndex, instructionIndex = ((NormalStatement) statement).getInstructionIndex();
+                try {
+                    ShrikeCTMethod shrikeCTMethod = (ShrikeCTMethod) statement.getNode().getMethod();
+                    iInstructions.add(shrikeCTMethod.getInstructions()[instructionIndex]);
+                    /* bcIndex = shrikeCTMethod.getBytecodeIndex(instructionIndex);
+                    System.err.println(instructionIndex);
+                    System.err.println ( shrikeCTMethod + ", bcIndex = " + bcIndex + ", " + shrikeCTMethod.getBytecodes().length);
+                    try {
+                        int src_line_number = shrikeCTMethod.getLineNumber(bcIndex);
+                        System.err.println ( "Source line number = " + src_line_number );
+                    } catch (Exception e) {
+                        System.err.println("Bytecode index no good");
+                        System.err.println(e.getMessage());
+                    } */
+                } catch (Exception e ) {
+                    e.printStackTrace();
+                    System.err.println("it's probably not a BT method (e.g. it's a fakeroot method)");
+                    System.err.println(e.getMessage());
+                }
+            }
+
             w.println(line);
             w.flush();
+
+            if (i > limit) {
+                break;
+            }
+        }
+
+        System.err.println("----------------------");
+        IInstruction[] instructions = new IInstruction[iInstructions.size()];
+        for (int j = 0; j < iInstructions.size(); j++) {
+            instructions[j] = iInstructions.get(j);
+        }
+
+        MethodData methodData = MethodData.makeWithDefaultHandlersAndInstToBytecodes(Constants.ACC_PUBLIC|Constants.ACC_PRIVATE,
+                "Ljava/lang/Object", "xx", "xx", instructions);
+        for (IInstruction in: methodData.getInstructions()) {
+            System.err.println(in);
         }
     }
 
-    public static void dumpSlice(Collection<Statement> slice) {
-        dumpSlice(slice, new PrintWriter(System.err));
+    public static void dumpSlice(Collection<Statement> slice, int limit) {
+        dumpSlice(slice, new PrintWriter(System.err), limit);
     }
 
 
@@ -386,12 +411,13 @@ public class SimpleSlicer {
             System.exit(1);
         }
 
-        //slice(jarPath, srcCaller, srcCallee, analysis, true);
+        slice(jarPath, srcCaller, srcCallee, analysis, true, DataDependenceOptions.NO_HEAP_NO_EXCEPTIONS,
+                      ControlDependenceOptions.FULL);
 
         srcCaller = "fu.hao.android.testslicer.MainActivity.foo2(Ljava/lang/String;)V;";
         srcCallee = "java.lang.Thread.start()V;";
-        slice(jarPath, srcCaller, srcCallee, analysis, false, DataDependenceOptions.NO_HEAP_NO_EXCEPTIONS,
-                ControlDependenceOptions.FULL);
+        //slice(jarPath, srcCaller, srcCallee, analysis, false, DataDependenceOptions.NO_HEAP_NO_EXCEPTIONS,
+          //      ControlDependenceOptions.FULL);
     }
 
     /**
